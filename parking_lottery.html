@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gabriola Park Visitor Parking Lottery</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f7f7f7;
+            color: #333;
+        }
+        h1, h2 {
+            text-align: center;
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        label {
+            display: inline-block;
+            margin-right: 8px;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .actions {
+            margin-top: 20px;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .results {
+            margin-top: 30px;
+        }
+        .winner {
+            background-color: #dff0d8;
+        }
+        .log {
+            background: #f9f9f9;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gabriola Park Visitor Parking Lottery</h1>
+        <p>Use this tool to run the annual weighted lottery for visitor parking stalls.  Fill in the applicant information below, assign weights based on the criteria, and run the draw.  Each applicant will receive at least one ballot regardless of deductions.</p>
+        <div class="form-group">
+            <label for="numSpots">Number of available spots:</label>
+            <input type="number" id="numSpots" min="1" value="8" />
+        </div>
+        <h2>Add applicant</h2>
+        <div id="applicantForm">
+            <div class="form-group">
+                <label for="applicantName">Name:</label>
+                <input type="text" id="applicantName" />
+            </div>
+            <div class="form-group">
+                <label for="extraCars"># of vehicles beyond 2:</label>
+                <input type="number" id="extraCars" min="0" value="0" />
+            </div>
+            <div class="form-group">
+                <input type="checkbox" id="largeVehicle" />
+                <label for="largeVehicle">Vehicle too large for garage (+1)</label>
+            </div>
+            <div class="form-group">
+                <input type="checkbox" id="previousViolation" />
+                <label for="previousViolation">Previous parking violations (-1)</label>
+            </div>
+            <div class="form-group">
+                <input type="checkbox" id="lessThanTwoInGarage" />
+                <label for="lessThanTwoInGarage">Less than two vehicles in garage (storage/clutter) (-1)</label>
+            </div>
+            <div class="form-group">
+                <input type="checkbox" id="noDriveway" />
+                <label for="noDriveway">No usable driveway (optional +1)</label>
+            </div>
+            <div class="actions">
+                <button id="addApplicantButton">Add Applicant</button>
+            </div>
+        </div>
+        <h2>Applicants</h2>
+        <table id="applicantsTable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>+1 (>2 cars)</th>
+                    <th>+2 (large vehicle)</th>
+                    <th>-1 (violations)</th>
+                    <th>-1 (clutter)</th>
+                    <th>+1 (no driveway)</th>
+                    <th>Total points</th>
+                    <th>Ballots (weight)</th>
+                    <th>Remove</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+        <div class="actions">
+            <button id="runLotteryButton">Run Lottery</button>
+        </div>
+        <div id="results" class="results"></div>
+        <div id="log" class="log" style="display:none;"></div>
+    </div>
+
+    <script>
+        const applicants = [];
+
+        function calculateScore(applicant) {
+            // Start with baseline 0 points; final weight will ensure at least 1 ballot
+            let score = 0;
+            if (applicant.extraCars && applicant.extraCars > 0) score += applicant.extraCars;
+            if (applicant.largeVehicle) score += 2;
+            if (applicant.previousViolation) score -= 1;
+            if (applicant.lessThanTwoInGarage) score -= 1;
+            if (applicant.noDriveway) score += 1;
+            return score;
+        }
+
+        function updateTable() {
+            const tbody = document.querySelector('#applicantsTable tbody');
+            tbody.innerHTML = '';
+            applicants.forEach((applicant, index) => {
+                const tr = document.createElement('tr');
+                // Name
+                const nameTd = document.createElement('td');
+                nameTd.textContent = applicant.name;
+                tr.appendChild(nameTd);
+
+                // Indicators
+                const carTd = document.createElement('td');
+                carTd.textContent = applicant.extraCars;
+                tr.appendChild(carTd);
+                [applicant.largeVehicle, applicant.previousViolation, applicant.lessThanTwoInGarage, applicant.noDriveway].forEach(flag => {
+                    const td = document.createElement('td');
+                    td.textContent = flag ? '✔' : '';
+                    tr.appendChild(td);
+                });
+                // Total points
+                const pointsTd = document.createElement('td');
+                pointsTd.textContent = applicant.score;
+                tr.appendChild(pointsTd);
+
+                // Ballots (weight). Minimum weight 1
+                const weightTd = document.createElement('td');
+                weightTd.textContent = applicant.weight;
+                tr.appendChild(weightTd);
+
+                // Remove button
+                const removeTd = document.createElement('td');
+                const removeButton = document.createElement('button');
+                removeButton.textContent = 'Remove';
+                removeButton.style.backgroundColor = '#dc3545';
+                removeButton.style.color = '#fff';
+                removeButton.style.border = 'none';
+                removeButton.style.padding = '5px 8px';
+                removeButton.style.borderRadius = '4px';
+                removeButton.onclick = function() {
+                    applicants.splice(index, 1);
+                    updateTable();
+                };
+                removeTd.appendChild(removeButton);
+                tr.appendChild(removeTd);
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        function addApplicant() {
+            const name = document.getElementById('applicantName').value.trim();
+            if (!name) {
+                alert('Please enter a name.');
+                return;
+            }
+            const applicant = {
+                name: name,
+                extraCars: parseInt(document.getElementById('extraCars').value) || 0,
+                largeVehicle: document.getElementById('largeVehicle').checked,
+                previousViolation: document.getElementById('previousViolation').checked,
+                lessThanTwoInGarage: document.getElementById('lessThanTwoInGarage').checked,
+                noDriveway: document.getElementById('noDriveway').checked
+            };
+            applicant.score = calculateScore(applicant);
+            applicant.weight = Math.max(1, 1 + applicant.score);
+            applicants.push(applicant);
+            updateTable();
+            // Reset form
+            document.getElementById('applicantName').value = '';
+            document.getElementById('extraCars').value = 0;
+            document.getElementById('largeVehicle').checked = false;
+            document.getElementById('previousViolation').checked = false;
+            document.getElementById('lessThanTwoInGarage').checked = false;
+            document.getElementById('noDriveway').checked = false;
+        }
+
+        function weightedRandomSelect(list) {
+            // Build cumulative array of weights
+            const totalWeight = list.reduce((sum, item) => sum + item.weight, 0);
+            const rand = Math.random() * totalWeight;
+            let cumulative = 0;
+            for (let i = 0; i < list.length; i++) {
+                cumulative += list[i].weight;
+                if (rand < cumulative) {
+                    return i;
+                }
+            }
+            return list.length - 1;
+        }
+
+        function runLottery() {
+            const numSpots = parseInt(document.getElementById('numSpots').value);
+            if (!numSpots || numSpots < 1) {
+                alert('Please enter a valid number of spots.');
+                return;
+            }
+            if (applicants.length === 0) {
+                alert('No applicants to draw from.');
+                return;
+            }
+            if (numSpots > applicants.length) {
+                alert('Number of spots exceeds number of applicants. All applicants will receive spots.');
+            }
+            // Clone applicants array for selection
+            const pool = applicants.map(app => Object.assign({}, app));
+            const winners = [];
+            const logEntries = [];
+
+            // Weighted random selection without replacement
+            while (winners.length < numSpots && pool.length > 0) {
+                const index = weightedRandomSelect(pool);
+                const selected = pool[index];
+                winners.push(selected);
+                // Logging
+                logEntries.push(`Selected <strong>${selected.name}</strong> (weight = ${selected.weight})`);
+                pool.splice(index, 1);
+            }
+
+            // Display results
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            const resultsTable = document.createElement('table');
+            const headerRow = document.createElement('tr');
+            ['Rank','Name','Total points','Weight'].forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            resultsTable.appendChild(headerRow);
+            winners.forEach((winner, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'winner';
+                const rankTd = document.createElement('td');
+                rankTd.textContent = idx + 1;
+                tr.appendChild(rankTd);
+                const nameTd = document.createElement('td');
+                nameTd.textContent = winner.name;
+                tr.appendChild(nameTd);
+                const pointsTd = document.createElement('td');
+                pointsTd.textContent = winner.score;
+                tr.appendChild(pointsTd);
+                const weightTd = document.createElement('td');
+                weightTd.textContent = winner.weight;
+                tr.appendChild(weightTd);
+                resultsTable.appendChild(tr);
+            });
+            resultsDiv.appendChild(resultsTable);
+            resultsDiv.insertAdjacentHTML('afterbegin', `<h2>Lottery Results</h2>`);
+
+            // Show log
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML = logEntries.join('<br>');
+            logDiv.style.display = 'block';
+        }
+
+        document.getElementById('addApplicantButton').addEventListener('click', addApplicant);
+        document.getElementById('runLotteryButton').addEventListener('click', runLottery);
+    </script>
+</body>
+</html>
